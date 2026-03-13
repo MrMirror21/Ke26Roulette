@@ -88,147 +88,84 @@ function createObstacles(world: Matter.World, Composite: typeof Matter.Composite
   const funnelRight = Bodies.rectangle(WORLD_WIDTH - 150, 150, 300, 15, { isStatic: true, angle: -Math.PI / 6, restitution: 0.4, label: "obstacle", render: { fillStyle: "#555" } });
   Composite.add(world, [funnelLeft, funnelRight]);
 
-  // Collect all non-peg obstacle zones to exclude pegs near them
+  // Layout: alternating single ramps (left/right), spaced 250px apart vertically
+  // Each row has ONE obstacle only - never two at the same height
+  const obstacleRows: { x: number; y: number; type: string; w?: number; angle?: number; r?: number }[] = [];
+  let rowY = 400;
+  let side = 0; // 0=left, 1=center, 2=right
+  const pattern = ["ramp", "spinner", "ramp", "bumper", "ramp", "spinner", "ramp", "bumper"];
+  let patIdx = 0;
+
+  while (rowY < WORLD_HEIGHT - 300) {
+    const type = pattern[patIdx % pattern.length];
+    let x: number;
+    if (side === 0) x = 150 + Math.random() * 150;
+    else if (side === 2) x = WORLD_WIDTH - 150 - Math.random() * 150;
+    else x = 350 + Math.random() * 200;
+
+    if (type === "ramp") {
+      const angle = side === 0 ? 0.35 + Math.random() * 0.1 : side === 2 ? -(0.35 + Math.random() * 0.1) : (Math.random() > 0.5 ? 0.3 : -0.3);
+      obstacleRows.push({ x, y: rowY, type: "ramp", w: 150, angle });
+    } else if (type === "spinner") {
+      obstacleRows.push({ x, y: rowY, type: "spinner", w: 160 });
+    } else {
+      obstacleRows.push({ x, y: rowY, type: "bumper", r: 25 });
+    }
+
+    rowY += 250;
+    side = (side + 1) % 3;
+    patIdx++;
+  }
+
+  // Place obstacles
   const exclusionZones: { x: number; y: number; r: number }[] = [];
 
-  // Rotating bars (key feature - obstacles that spin)
-  const rotatingBarPositions = [
-    { x: 450, y: 600, w: 200 },
-    { x: 250, y: 1000, w: 180 },
-    { x: 650, y: 1000, w: 180 },
-    { x: 450, y: 1400, w: 220 },
-    { x: 200, y: 1800, w: 160 },
-    { x: 700, y: 1800, w: 160 },
-    { x: 450, y: 2200, w: 200 },
-    { x: 300, y: 2600, w: 180 },
-    { x: 600, y: 2600, w: 180 },
-    { x: 450, y: 3000, w: 220 },
-    { x: 200, y: 3400, w: 160 },
-    { x: 700, y: 3400, w: 160 },
-    { x: 450, y: 3800, w: 200 },
-    { x: 300, y: 4200, w: 180 },
-    { x: 600, y: 4200, w: 180 },
-  ];
-
-  rotatingBarPositions.forEach(({ x, y, w }) => {
-    exclusionZones.push({ x, y, r: w / 2 + 40 });
-    const bar = Bodies.rectangle(x, y, w, 12, {
-      isStatic: false,
-      restitution: 0.9,
-      friction: 0.05,
-      density: 0.01,
-      label: "spinner",
-      render: { fillStyle: "#ff6600" },
-    });
-    const pivot = Constraint.create({
-      pointA: { x, y },
-      bodyB: bar,
-      pointB: { x: 0, y: 0 },
-      stiffness: 1,
-      length: 0,
-    });
-    Body.setAngularVelocity(bar, (Math.random() - 0.5) * 0.08);
-    obstacles.push(bar);
-    constraints.push(pivot);
-    Composite.add(world, [bar, pivot]);
+  obstacleRows.forEach((row) => {
+    if (row.type === "spinner") {
+      const w = row.w || 160;
+      exclusionZones.push({ x: row.x, y: row.y, r: w / 2 + 50 });
+      const bar = Bodies.rectangle(row.x, row.y, w, 12, {
+        isStatic: false, restitution: 0.9, friction: 0.05, density: 0.01,
+        label: "spinner", render: { fillStyle: "#ff6600" },
+      });
+      const pivot = Constraint.create({
+        pointA: { x: row.x, y: row.y }, bodyB: bar,
+        pointB: { x: 0, y: 0 }, stiffness: 1, length: 0,
+      });
+      Body.setAngularVelocity(bar, (Math.random() - 0.5) * 0.1);
+      obstacles.push(bar);
+      constraints.push(pivot);
+      Composite.add(world, [bar, pivot]);
+    } else if (row.type === "ramp") {
+      const w = row.w || 150;
+      exclusionZones.push({ x: row.x, y: row.y, r: w / 2 + 50 });
+      const ramp = Bodies.rectangle(row.x, row.y, w, 10, {
+        isStatic: true, angle: row.angle || 0.35, restitution: 0.4, friction: 0.03,
+        label: "ramp", render: { fillStyle: "#4a9eff" },
+      });
+      obstacles.push(ramp);
+      Composite.add(world, ramp);
+    } else if (row.type === "bumper") {
+      const r = row.r || 25;
+      exclusionZones.push({ x: row.x, y: row.y, r: r + 50 });
+      const bumper = Bodies.circle(row.x, row.y, r, {
+        isStatic: true, restitution: 1.3, friction: 0,
+        label: "bumper", render: { fillStyle: "#ff3366" },
+      });
+      obstacles.push(bumper);
+      Composite.add(world, bumper);
+    }
   });
 
-  // Angled platforms / ramps (all with strong angles, never horizontal)
-  const ramps = [
-    { x: 200, y: 500, w: 220, angle: 0.35 },
-    { x: 700, y: 700, w: 220, angle: -0.35 },
-    { x: 300, y: 900, w: 180, angle: -0.3 },
-    { x: 600, y: 1150, w: 180, angle: 0.3 },
-    { x: 200, y: 1350, w: 200, angle: 0.38 },
-    { x: 700, y: 1550, w: 200, angle: -0.38 },
-    { x: 350, y: 1700, w: 180, angle: -0.32 },
-    { x: 550, y: 1950, w: 180, angle: 0.32 },
-    { x: 200, y: 2150, w: 220, angle: 0.35 },
-    { x: 700, y: 2350, w: 220, angle: -0.35 },
-    { x: 400, y: 2500, w: 180, angle: -0.3 },
-    { x: 500, y: 2750, w: 180, angle: 0.3 },
-    { x: 200, y: 2950, w: 200, angle: 0.38 },
-    { x: 700, y: 3150, w: 200, angle: -0.38 },
-    { x: 350, y: 3350, w: 180, angle: -0.32 },
-    { x: 550, y: 3550, w: 180, angle: 0.32 },
-    { x: 200, y: 3750, w: 220, angle: 0.35 },
-    { x: 700, y: 3950, w: 220, angle: -0.35 },
-    { x: 400, y: 4100, w: 180, angle: -0.3 },
-    { x: 500, y: 4300, w: 180, angle: 0.3 },
-  ];
-
-  ramps.forEach(({ x, y, w, angle }) => {
-    exclusionZones.push({ x, y, r: w / 2 + 40 });
-    const ramp = Bodies.rectangle(x, y, w, 10, {
-      isStatic: true,
-      angle,
-      restitution: 0.3,
-      friction: 0.05,
-      label: "ramp",
-      render: { fillStyle: "#4a9eff" },
-    });
-    obstacles.push(ramp);
-    Composite.add(world, ramp);
-  });
-
-  // Bumpers (circular, bouncy)
-  const bumperPositions = [
-    { x: 150, y: 800, r: 30 }, { x: 750, y: 800, r: 30 },
-    { x: 450, y: 1200, r: 35 },
-    { x: 250, y: 1600, r: 30 }, { x: 650, y: 1600, r: 30 },
-    { x: 450, y: 2000, r: 35 },
-    { x: 150, y: 2400, r: 30 }, { x: 750, y: 2400, r: 30 },
-    { x: 450, y: 2800, r: 35 },
-    { x: 250, y: 3200, r: 30 }, { x: 650, y: 3200, r: 30 },
-    { x: 450, y: 3600, r: 35 },
-    { x: 150, y: 4000, r: 30 }, { x: 750, y: 4000, r: 30 },
-    { x: 450, y: 4400, r: 35 },
-  ];
-
-  bumperPositions.forEach(({ x, y, r }) => {
-    exclusionZones.push({ x, y, r: r + 40 });
-    const bumper = Bodies.circle(x, y, r, {
-      isStatic: true,
-      restitution: 1.2,
-      friction: 0,
-      label: "bumper",
-      render: { fillStyle: "#ff3366" },
-    });
-    obstacles.push(bumper);
-    Composite.add(world, bumper);
-  });
-
-  // Angled deflectors (V-shaped, never horizontal)
-  const deflectorPositions = [
-    { x: 300, y: 650, angle: 0.35 }, { x: 600, y: 650, angle: -0.35 },
-    { x: 200, y: 1200, angle: 0.4 }, { x: 700, y: 1200, angle: -0.4 },
-    { x: 350, y: 1750, angle: -0.3 }, { x: 550, y: 1750, angle: 0.3 },
-    { x: 250, y: 2300, angle: 0.35 }, { x: 650, y: 2300, angle: -0.35 },
-    { x: 400, y: 2850, angle: -0.4 }, { x: 500, y: 2850, angle: 0.4 },
-    { x: 200, y: 3400, angle: 0.3 }, { x: 700, y: 3400, angle: -0.3 },
-    { x: 350, y: 3950, angle: -0.35 }, { x: 550, y: 3950, angle: 0.35 },
-    { x: 300, y: 4400, angle: 0.4 }, { x: 600, y: 4400, angle: -0.4 },
-  ];
-
-  deflectorPositions.forEach(({ x, y, angle }) => {
-    exclusionZones.push({ x, y, r: 100 });
-    const deflector = Bodies.rectangle(x, y, 120, 10, {
-      isStatic: true, angle, restitution: 0.6, friction: 0.05, label: "gate", render: { fillStyle: "#44aa88" },
-    });
-    Composite.add(world, deflector);
-    obstacles.push(deflector);
-  });
-
-  // Peg rows - placed AFTER other obstacles, excluding zones near them
+  // Peg rows - only where no obstacles exist
   for (let row = 0; row < 50; row++) {
     const y = 350 + row * 90;
-    const cols = row % 2 === 0 ? 8 : 7;
-    const offsetX = row % 2 === 0 ? 60 : 110;
+    const cols = row % 2 === 0 ? 7 : 6;
+    const offsetX = row % 2 === 0 ? 80 : 130;
     for (let col = 0; col < cols; col++) {
-      const x = offsetX + col * 105;
-      if (x <= 30 || x >= WORLD_WIDTH - 30) continue;
+      const x = offsetX + col * 115;
+      if (x <= 40 || x >= WORLD_WIDTH - 40) continue;
 
-      // Check if this peg is too close to any obstacle
       const tooClose = exclusionZones.some((zone) => {
         const dx = x - zone.x;
         const dy = y - zone.y;
@@ -236,12 +173,9 @@ function createObstacles(world: Matter.World, Composite: typeof Matter.Composite
       });
       if (tooClose) continue;
 
-      const peg = Bodies.circle(x, y, 10, {
-        isStatic: true,
-        restitution: 0.8,
-        friction: 0.05,
-        label: "peg",
-        render: { fillStyle: "#666" },
+      const peg = Bodies.circle(x, y, 8, {
+        isStatic: true, restitution: 0.9, friction: 0.03,
+        label: "peg", render: { fillStyle: "#666" },
       });
       obstacles.push(peg);
       Composite.add(world, peg);
@@ -366,6 +300,10 @@ export default function PinballGame() {
       }
     });
 
+    // Anti-stuck: track each ball's last Y position
+    const lastBallY: number[] = balls.map(() => 0);
+    const stuckTimers: number[] = balls.map(() => 0);
+
     // Camera tracking variables
     let cameraSwitchTime = 0;
     let currentCameraMode = 0; // 0=leader, 1=trailer, 2=pack, 3=overview
@@ -382,8 +320,35 @@ export default function PinballGame() {
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
+    let lastStuckCheck = Date.now();
+
     const render = () => {
       const now = Date.now();
+
+      // Anti-stuck detection: every 2 seconds, check if balls moved
+      if (now - lastStuckCheck > 2000) {
+        lastStuckCheck = now;
+        for (let i = 0; i < balls.length; i++) {
+          const ball = balls[i];
+          if (ball.finished) continue;
+          const dy = Math.abs(ball.body.position.y - lastBallY[i]);
+          const speed = ball.body.speed;
+          if (dy < 5 && speed < 0.5) {
+            stuckTimers[i]++;
+            if (stuckTimers[i] >= 2) {
+              // Ball is stuck - give it a random nudge
+              Body.applyForce(ball.body, ball.body.position, {
+                x: (Math.random() - 0.5) * 0.005,
+                y: 0.003 + Math.random() * 0.003,
+              });
+              stuckTimers[i] = 0;
+            }
+          } else {
+            stuckTimers[i] = 0;
+          }
+          lastBallY[i] = ball.body.position.y;
+        }
+      }
 
       // Update ball states
       let allFinished = true;
@@ -651,34 +616,34 @@ export default function PinballGame() {
       <canvas ref={canvasRef} className="absolute inset-0" />
 
       {/* Top broadcast bar */}
-      <div className="absolute top-0 left-0 right-0 h-12 bg-gradient-to-r from-red-900/90 via-red-800/90 to-red-900/90 flex items-center px-4 z-10 border-b border-red-600/50">
-        <div className="flex items-center gap-2">
-          <span className="bg-red-600 text-white text-xs font-bold px-2 py-0.5 rounded animate-pulse">LIVE</span>
-          <span className="text-white font-bold text-sm">☕ COFFEE PINBALL CHAMPIONSHIP</span>
+      <div className="absolute top-0 left-0 right-0 h-11 bg-gradient-to-r from-red-900/90 via-red-800/90 to-red-900/90 flex items-center px-4 z-10 border-b border-red-600/50">
+        <div className="flex items-center gap-2 shrink-0">
+          <span className="bg-red-600 text-white text-[10px] font-bold px-2 py-0.5 rounded animate-pulse whitespace-nowrap">LIVE</span>
+          <span className="text-white font-bold text-xs whitespace-nowrap">☕ COFFEE PINBALL</span>
         </div>
         {gamePhase === "running" && (
-          <div className="ml-auto flex items-center gap-3 text-xs text-white/80">
-            <span className="bg-white/10 px-2 py-1 rounded">📷 {cameraMode}</span>
-            <span className="bg-white/10 px-2 py-1 rounded">🎯 {cameraTarget}</span>
-            <span className="bg-yellow-600/80 px-2 py-1 rounded font-bold">{rankings.length}/{PARTICIPANT_NAMES.length} 골인</span>
+          <div className="ml-auto flex items-center gap-2 text-[10px] text-white/80 shrink-0">
+            <span className="bg-white/10 px-2 py-1 rounded whitespace-nowrap">📷 {cameraMode}</span>
+            <span className="bg-white/10 px-2 py-1 rounded whitespace-nowrap">🎯 {cameraTarget}</span>
+            <span className="bg-yellow-600/80 px-2 py-1 rounded font-bold whitespace-nowrap">{rankings.length}/{PARTICIPANT_NAMES.length} 골인</span>
           </div>
         )}
       </div>
 
       {/* Commentary panel - left side */}
       {gamePhase === "running" && (
-        <div className="absolute left-3 top-16 w-80 z-10">
+        <div className="absolute left-3 top-14 z-10" style={{ width: "min(320px, 40vw)" }}>
           <div className="bg-black/70 backdrop-blur-sm rounded-lg border border-white/10 overflow-hidden">
-            <div className="bg-gradient-to-r from-blue-900/80 to-purple-900/80 px-3 py-1.5 border-b border-white/10">
-              <span className="text-white text-xs font-bold">💬 실시간 중계</span>
+            <div className="bg-gradient-to-r from-blue-900/80 to-purple-900/80 px-3 py-2 border-b border-white/10">
+              <span className="text-white text-xs font-bold whitespace-nowrap">💬 실시간 중계</span>
             </div>
-            <div className="p-2 max-h-60 overflow-hidden">
+            <div className="p-3 max-h-48 overflow-hidden">
               {commentary.map((c, i) => (
                 <div
                   key={c.id}
-                  className="text-xs py-1 border-b border-white/5 last:border-0"
+                  className="text-[11px] leading-relaxed py-1 border-b border-white/5 last:border-0"
                   style={{
-                    opacity: 1 - i * 0.12,
+                    opacity: 1 - i * 0.15,
                     color: i === 0 ? "#fff" : "#aaa",
                     fontWeight: i === 0 ? "bold" : "normal",
                   }}
@@ -693,22 +658,22 @@ export default function PinballGame() {
 
       {/* Rankings panel - right side */}
       {gamePhase === "running" && rankings.length > 0 && (
-        <div className="absolute right-3 top-16 w-56 z-10">
+        <div className="absolute right-3 top-14 z-10" style={{ width: "min(200px, 30vw)" }}>
           <div className="bg-black/70 backdrop-blur-sm rounded-lg border border-white/10 overflow-hidden">
-            <div className="bg-gradient-to-r from-yellow-900/80 to-orange-900/80 px-3 py-1.5 border-b border-white/10">
-              <span className="text-white text-xs font-bold">🏆 골인 순서</span>
+            <div className="bg-gradient-to-r from-yellow-900/80 to-orange-900/80 px-3 py-2 border-b border-white/10">
+              <span className="text-white text-xs font-bold whitespace-nowrap">🏆 골인 순서</span>
             </div>
-            <div className="p-2 max-h-80 overflow-y-auto">
+            <div className="p-2 max-h-64 overflow-y-auto">
               {rankings.map((r) => (
                 <div
                   key={r.number}
-                  className="flex items-center gap-2 py-1 text-xs border-b border-white/5 last:border-0"
+                  className="flex items-center gap-2 py-1.5 text-xs border-b border-white/5 last:border-0 whitespace-nowrap"
                 >
-                  <span className="w-6 text-center font-bold" style={{ color: r.rank <= 3 ? "#ffd700" : "#888" }}>
+                  <span className="w-7 text-center font-bold shrink-0" style={{ color: r.rank <= 3 ? "#ffd700" : "#888" }}>
                     {r.rank === 1 ? "🥇" : r.rank === 2 ? "🥈" : r.rank === 3 ? "🥉" : `${r.rank}등`}
                   </span>
                   <span
-                    className="w-3 h-3 rounded-full inline-block"
+                    className="w-3 h-3 rounded-full shrink-0"
                     style={{ backgroundColor: r.color }}
                   />
                   <span className="text-white">#{r.number}</span>
@@ -721,19 +686,19 @@ export default function PinballGame() {
 
       {/* Start screen */}
       {gamePhase === "ready" && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center z-20 bg-gradient-to-b from-[#0a0a2e] to-[#1a0a2e]">
-          <div className="text-center">
-            <h1 className="text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 via-red-400 to-pink-400 mb-3">
+        <div className="absolute inset-0 flex flex-col items-center justify-center z-20 bg-gradient-to-b from-[#0a0a2e] to-[#1a0a2e] px-6">
+          <div className="text-center max-w-lg">
+            <h1 className="text-4xl sm:text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 via-red-400 to-pink-400 mb-4 leading-tight">
               ☕ COFFEE PINBALL
             </h1>
-            <p className="text-lg text-white/60 mb-2">누가 커피를 살까? 핀볼로 결정하자!</p>
+            <p className="text-base sm:text-lg text-white/60 mb-1">누가 커피를 살까? 핀볼로 결정하자!</p>
             <p className="text-sm text-white/40 mb-8">15명의 공이 떨어집니다. 꼴찌가 커피를 삽니다!</p>
 
-            <div className="flex flex-wrap justify-center gap-2 mb-10 max-w-lg">
+            <div className="flex flex-wrap justify-center gap-2.5 mb-10 max-w-md mx-auto">
               {BALL_COLORS.map((color, i) => (
                 <span
                   key={i}
-                  className="w-10 h-10 rounded-full text-sm font-bold text-white flex items-center justify-center"
+                  className="w-10 h-10 rounded-full text-sm font-bold text-white flex items-center justify-center shadow-md"
                   style={{ backgroundColor: color + "CC" }}
                 >
                   {i + 1}
@@ -743,7 +708,7 @@ export default function PinballGame() {
 
             <button
               onClick={startGame}
-              className="px-10 py-4 bg-gradient-to-r from-red-600 to-orange-500 text-white text-xl font-black rounded-full hover:scale-105 transition-transform shadow-lg shadow-red-500/30 cursor-pointer"
+              className="px-12 py-4 bg-gradient-to-r from-red-600 to-orange-500 text-white text-xl font-black rounded-full hover:scale-105 active:scale-95 transition-transform shadow-lg shadow-red-500/30 cursor-pointer"
             >
               🎰 게임 시작!
             </button>
@@ -753,15 +718,13 @@ export default function PinballGame() {
 
       {/* Finish screen */}
       {gamePhase === "finished" && loser && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center z-20 bg-black/80 backdrop-blur-sm">
-          <div className="text-center p-10 bg-gradient-to-b from-[#1a0a2e] to-[#0a0a2e] rounded-2xl border border-yellow-500/30 shadow-2xl shadow-yellow-500/20 max-w-md">
-            <div className="text-6xl mb-4">☕</div>
+        <div className="absolute inset-0 flex flex-col items-center justify-center z-20 bg-black/80 backdrop-blur-sm px-4">
+          <div className="text-center py-8 px-8 sm:px-10 bg-gradient-to-b from-[#1a0a2e] to-[#0a0a2e] rounded-2xl border border-yellow-500/30 shadow-2xl shadow-yellow-500/20 w-full max-w-sm sm:max-w-md">
+            <div className="text-6xl mb-3">☕</div>
             <h2 className="text-3xl font-black text-yellow-400 mb-2">게임 종료!</h2>
-            <p className="text-xl text-white/80 mb-6">
-              오늘 커피는...
-            </p>
+            <p className="text-lg text-white/80 mb-5">오늘 커피는...</p>
             <div
-              className="inline-block px-8 py-4 rounded-2xl text-5xl font-black text-white mb-6"
+              className="inline-block px-8 py-4 rounded-2xl text-5xl font-black text-white mb-3"
               style={{
                 backgroundColor: BALL_COLORS[Number(loser) - 1] + "DD",
                 boxShadow: `0 0 40px ${BALL_COLORS[Number(loser) - 1]}66`,
@@ -769,22 +732,22 @@ export default function PinballGame() {
             >
               #{loser}
             </div>
-            <p className="text-lg text-yellow-300 mb-8">번이 커피를 삽니다! 🎉</p>
+            <p className="text-lg text-yellow-300 mb-6">번이 커피를 삽니다! 🎉</p>
 
             {/* Full ranking */}
-            <div className="bg-black/50 rounded-xl p-4 mb-6 max-h-52 overflow-y-auto">
-              <p className="text-xs text-white/50 mb-2 font-bold">최종 순위</p>
+            <div className="bg-black/50 rounded-xl p-4 mb-6 max-h-48 overflow-y-auto">
+              <p className="text-[11px] text-white/50 mb-2 font-bold">최종 순위</p>
               {rankings.map((r) => (
                 <div
                   key={r.number}
-                  className="flex items-center gap-2 py-1 text-sm"
+                  className="flex items-center gap-2 py-1.5 text-sm whitespace-nowrap"
                   style={{ color: String(r.number) === loser ? "#ff6666" : "#ccc" }}
                 >
-                  <span className="w-8 text-right font-bold">
+                  <span className="w-8 text-right font-bold shrink-0">
                     {r.rank === 1 ? "🥇" : r.rank === 2 ? "🥈" : r.rank === 3 ? "🥉" : `${r.rank}등`}
                   </span>
                   <span
-                    className="w-3 h-3 rounded-full inline-block"
+                    className="w-3 h-3 rounded-full shrink-0"
                     style={{ backgroundColor: r.color }}
                   />
                   <span className={String(r.number) === loser ? "font-bold" : ""}>#{r.number}</span>
@@ -797,7 +760,7 @@ export default function PinballGame() {
               onClick={() => {
                 setGamePhase("ready");
               }}
-              className="px-8 py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white text-lg font-bold rounded-full hover:scale-105 transition-transform cursor-pointer"
+              className="px-10 py-3.5 bg-gradient-to-r from-blue-600 to-purple-600 text-white text-lg font-bold rounded-full hover:scale-105 active:scale-95 transition-transform cursor-pointer"
             >
               🔄 다시 하기
             </button>
