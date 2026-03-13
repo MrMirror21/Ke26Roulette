@@ -88,147 +88,84 @@ function createObstacles(world: Matter.World, Composite: typeof Matter.Composite
   const funnelRight = Bodies.rectangle(WORLD_WIDTH - 150, 150, 300, 15, { isStatic: true, angle: -Math.PI / 6, restitution: 0.4, label: "obstacle", render: { fillStyle: "#555" } });
   Composite.add(world, [funnelLeft, funnelRight]);
 
-  // Collect all non-peg obstacle zones to exclude pegs near them
+  // Layout: alternating single ramps (left/right), spaced 250px apart vertically
+  // Each row has ONE obstacle only - never two at the same height
+  const obstacleRows: { x: number; y: number; type: string; w?: number; angle?: number; r?: number }[] = [];
+  let rowY = 400;
+  let side = 0; // 0=left, 1=center, 2=right
+  const pattern = ["ramp", "spinner", "ramp", "bumper", "ramp", "spinner", "ramp", "bumper"];
+  let patIdx = 0;
+
+  while (rowY < WORLD_HEIGHT - 300) {
+    const type = pattern[patIdx % pattern.length];
+    let x: number;
+    if (side === 0) x = 150 + Math.random() * 150;
+    else if (side === 2) x = WORLD_WIDTH - 150 - Math.random() * 150;
+    else x = 350 + Math.random() * 200;
+
+    if (type === "ramp") {
+      const angle = side === 0 ? 0.35 + Math.random() * 0.1 : side === 2 ? -(0.35 + Math.random() * 0.1) : (Math.random() > 0.5 ? 0.3 : -0.3);
+      obstacleRows.push({ x, y: rowY, type: "ramp", w: 150, angle });
+    } else if (type === "spinner") {
+      obstacleRows.push({ x, y: rowY, type: "spinner", w: 160 });
+    } else {
+      obstacleRows.push({ x, y: rowY, type: "bumper", r: 25 });
+    }
+
+    rowY += 250;
+    side = (side + 1) % 3;
+    patIdx++;
+  }
+
+  // Place obstacles
   const exclusionZones: { x: number; y: number; r: number }[] = [];
 
-  // Rotating bars (key feature - obstacles that spin)
-  const rotatingBarPositions = [
-    { x: 450, y: 600, w: 200 },
-    { x: 250, y: 1000, w: 180 },
-    { x: 650, y: 1000, w: 180 },
-    { x: 450, y: 1400, w: 220 },
-    { x: 200, y: 1800, w: 160 },
-    { x: 700, y: 1800, w: 160 },
-    { x: 450, y: 2200, w: 200 },
-    { x: 300, y: 2600, w: 180 },
-    { x: 600, y: 2600, w: 180 },
-    { x: 450, y: 3000, w: 220 },
-    { x: 200, y: 3400, w: 160 },
-    { x: 700, y: 3400, w: 160 },
-    { x: 450, y: 3800, w: 200 },
-    { x: 300, y: 4200, w: 180 },
-    { x: 600, y: 4200, w: 180 },
-  ];
-
-  rotatingBarPositions.forEach(({ x, y, w }) => {
-    exclusionZones.push({ x, y, r: w / 2 + 40 });
-    const bar = Bodies.rectangle(x, y, w, 12, {
-      isStatic: false,
-      restitution: 0.9,
-      friction: 0.05,
-      density: 0.01,
-      label: "spinner",
-      render: { fillStyle: "#ff6600" },
-    });
-    const pivot = Constraint.create({
-      pointA: { x, y },
-      bodyB: bar,
-      pointB: { x: 0, y: 0 },
-      stiffness: 1,
-      length: 0,
-    });
-    Body.setAngularVelocity(bar, (Math.random() - 0.5) * 0.08);
-    obstacles.push(bar);
-    constraints.push(pivot);
-    Composite.add(world, [bar, pivot]);
+  obstacleRows.forEach((row) => {
+    if (row.type === "spinner") {
+      const w = row.w || 160;
+      exclusionZones.push({ x: row.x, y: row.y, r: w / 2 + 50 });
+      const bar = Bodies.rectangle(row.x, row.y, w, 12, {
+        isStatic: false, restitution: 0.9, friction: 0.05, density: 0.01,
+        label: "spinner", render: { fillStyle: "#ff6600" },
+      });
+      const pivot = Constraint.create({
+        pointA: { x: row.x, y: row.y }, bodyB: bar,
+        pointB: { x: 0, y: 0 }, stiffness: 1, length: 0,
+      });
+      Body.setAngularVelocity(bar, (Math.random() - 0.5) * 0.1);
+      obstacles.push(bar);
+      constraints.push(pivot);
+      Composite.add(world, [bar, pivot]);
+    } else if (row.type === "ramp") {
+      const w = row.w || 150;
+      exclusionZones.push({ x: row.x, y: row.y, r: w / 2 + 50 });
+      const ramp = Bodies.rectangle(row.x, row.y, w, 10, {
+        isStatic: true, angle: row.angle || 0.35, restitution: 0.4, friction: 0.03,
+        label: "ramp", render: { fillStyle: "#4a9eff" },
+      });
+      obstacles.push(ramp);
+      Composite.add(world, ramp);
+    } else if (row.type === "bumper") {
+      const r = row.r || 25;
+      exclusionZones.push({ x: row.x, y: row.y, r: r + 50 });
+      const bumper = Bodies.circle(row.x, row.y, r, {
+        isStatic: true, restitution: 1.3, friction: 0,
+        label: "bumper", render: { fillStyle: "#ff3366" },
+      });
+      obstacles.push(bumper);
+      Composite.add(world, bumper);
+    }
   });
 
-  // Angled platforms / ramps (all with strong angles, never horizontal)
-  const ramps = [
-    { x: 200, y: 500, w: 220, angle: 0.35 },
-    { x: 700, y: 700, w: 220, angle: -0.35 },
-    { x: 300, y: 900, w: 180, angle: -0.3 },
-    { x: 600, y: 1150, w: 180, angle: 0.3 },
-    { x: 200, y: 1350, w: 200, angle: 0.38 },
-    { x: 700, y: 1550, w: 200, angle: -0.38 },
-    { x: 350, y: 1700, w: 180, angle: -0.32 },
-    { x: 550, y: 1950, w: 180, angle: 0.32 },
-    { x: 200, y: 2150, w: 220, angle: 0.35 },
-    { x: 700, y: 2350, w: 220, angle: -0.35 },
-    { x: 400, y: 2500, w: 180, angle: -0.3 },
-    { x: 500, y: 2750, w: 180, angle: 0.3 },
-    { x: 200, y: 2950, w: 200, angle: 0.38 },
-    { x: 700, y: 3150, w: 200, angle: -0.38 },
-    { x: 350, y: 3350, w: 180, angle: -0.32 },
-    { x: 550, y: 3550, w: 180, angle: 0.32 },
-    { x: 200, y: 3750, w: 220, angle: 0.35 },
-    { x: 700, y: 3950, w: 220, angle: -0.35 },
-    { x: 400, y: 4100, w: 180, angle: -0.3 },
-    { x: 500, y: 4300, w: 180, angle: 0.3 },
-  ];
-
-  ramps.forEach(({ x, y, w, angle }) => {
-    exclusionZones.push({ x, y, r: w / 2 + 40 });
-    const ramp = Bodies.rectangle(x, y, w, 10, {
-      isStatic: true,
-      angle,
-      restitution: 0.3,
-      friction: 0.05,
-      label: "ramp",
-      render: { fillStyle: "#4a9eff" },
-    });
-    obstacles.push(ramp);
-    Composite.add(world, ramp);
-  });
-
-  // Bumpers (circular, bouncy)
-  const bumperPositions = [
-    { x: 150, y: 800, r: 30 }, { x: 750, y: 800, r: 30 },
-    { x: 450, y: 1200, r: 35 },
-    { x: 250, y: 1600, r: 30 }, { x: 650, y: 1600, r: 30 },
-    { x: 450, y: 2000, r: 35 },
-    { x: 150, y: 2400, r: 30 }, { x: 750, y: 2400, r: 30 },
-    { x: 450, y: 2800, r: 35 },
-    { x: 250, y: 3200, r: 30 }, { x: 650, y: 3200, r: 30 },
-    { x: 450, y: 3600, r: 35 },
-    { x: 150, y: 4000, r: 30 }, { x: 750, y: 4000, r: 30 },
-    { x: 450, y: 4400, r: 35 },
-  ];
-
-  bumperPositions.forEach(({ x, y, r }) => {
-    exclusionZones.push({ x, y, r: r + 40 });
-    const bumper = Bodies.circle(x, y, r, {
-      isStatic: true,
-      restitution: 1.2,
-      friction: 0,
-      label: "bumper",
-      render: { fillStyle: "#ff3366" },
-    });
-    obstacles.push(bumper);
-    Composite.add(world, bumper);
-  });
-
-  // Angled deflectors (V-shaped, never horizontal)
-  const deflectorPositions = [
-    { x: 300, y: 650, angle: 0.35 }, { x: 600, y: 650, angle: -0.35 },
-    { x: 200, y: 1200, angle: 0.4 }, { x: 700, y: 1200, angle: -0.4 },
-    { x: 350, y: 1750, angle: -0.3 }, { x: 550, y: 1750, angle: 0.3 },
-    { x: 250, y: 2300, angle: 0.35 }, { x: 650, y: 2300, angle: -0.35 },
-    { x: 400, y: 2850, angle: -0.4 }, { x: 500, y: 2850, angle: 0.4 },
-    { x: 200, y: 3400, angle: 0.3 }, { x: 700, y: 3400, angle: -0.3 },
-    { x: 350, y: 3950, angle: -0.35 }, { x: 550, y: 3950, angle: 0.35 },
-    { x: 300, y: 4400, angle: 0.4 }, { x: 600, y: 4400, angle: -0.4 },
-  ];
-
-  deflectorPositions.forEach(({ x, y, angle }) => {
-    exclusionZones.push({ x, y, r: 100 });
-    const deflector = Bodies.rectangle(x, y, 120, 10, {
-      isStatic: true, angle, restitution: 0.6, friction: 0.05, label: "gate", render: { fillStyle: "#44aa88" },
-    });
-    Composite.add(world, deflector);
-    obstacles.push(deflector);
-  });
-
-  // Peg rows - placed AFTER other obstacles, excluding zones near them
+  // Peg rows - only where no obstacles exist
   for (let row = 0; row < 50; row++) {
     const y = 350 + row * 90;
-    const cols = row % 2 === 0 ? 8 : 7;
-    const offsetX = row % 2 === 0 ? 60 : 110;
+    const cols = row % 2 === 0 ? 7 : 6;
+    const offsetX = row % 2 === 0 ? 80 : 130;
     for (let col = 0; col < cols; col++) {
-      const x = offsetX + col * 105;
-      if (x <= 30 || x >= WORLD_WIDTH - 30) continue;
+      const x = offsetX + col * 115;
+      if (x <= 40 || x >= WORLD_WIDTH - 40) continue;
 
-      // Check if this peg is too close to any obstacle
       const tooClose = exclusionZones.some((zone) => {
         const dx = x - zone.x;
         const dy = y - zone.y;
@@ -236,12 +173,9 @@ function createObstacles(world: Matter.World, Composite: typeof Matter.Composite
       });
       if (tooClose) continue;
 
-      const peg = Bodies.circle(x, y, 10, {
-        isStatic: true,
-        restitution: 0.8,
-        friction: 0.05,
-        label: "peg",
-        render: { fillStyle: "#666" },
+      const peg = Bodies.circle(x, y, 8, {
+        isStatic: true, restitution: 0.9, friction: 0.03,
+        label: "peg", render: { fillStyle: "#666" },
       });
       obstacles.push(peg);
       Composite.add(world, peg);
@@ -366,6 +300,10 @@ export default function PinballGame() {
       }
     });
 
+    // Anti-stuck: track each ball's last Y position
+    const lastBallY: number[] = balls.map(() => 0);
+    const stuckTimers: number[] = balls.map(() => 0);
+
     // Camera tracking variables
     let cameraSwitchTime = 0;
     let currentCameraMode = 0; // 0=leader, 1=trailer, 2=pack, 3=overview
@@ -382,8 +320,35 @@ export default function PinballGame() {
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
+    let lastStuckCheck = Date.now();
+
     const render = () => {
       const now = Date.now();
+
+      // Anti-stuck detection: every 2 seconds, check if balls moved
+      if (now - lastStuckCheck > 2000) {
+        lastStuckCheck = now;
+        for (let i = 0; i < balls.length; i++) {
+          const ball = balls[i];
+          if (ball.finished) continue;
+          const dy = Math.abs(ball.body.position.y - lastBallY[i]);
+          const speed = ball.body.speed;
+          if (dy < 5 && speed < 0.5) {
+            stuckTimers[i]++;
+            if (stuckTimers[i] >= 2) {
+              // Ball is stuck - give it a random nudge
+              Body.applyForce(ball.body, ball.body.position, {
+                x: (Math.random() - 0.5) * 0.005,
+                y: 0.003 + Math.random() * 0.003,
+              });
+              stuckTimers[i] = 0;
+            }
+          } else {
+            stuckTimers[i] = 0;
+          }
+          lastBallY[i] = ball.body.position.y;
+        }
+      }
 
       // Update ball states
       let allFinished = true;
