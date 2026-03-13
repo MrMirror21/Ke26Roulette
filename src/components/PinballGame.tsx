@@ -57,6 +57,7 @@ function pickRandom<T>(arr: T[]): T {
 
 interface BallState {
   name: string;
+  number: number;
   color: string;
   x: number;
   y: number;
@@ -150,28 +151,28 @@ function createObstacles(world: Matter.World, Composite: typeof Matter.Composite
     Composite.add(world, [bar, pivot]);
   });
 
-  // Angled platforms / ramps
+  // Angled platforms / ramps (all with strong angles, never horizontal)
   const ramps = [
-    { x: 200, y: 500, w: 250, angle: 0.2 },
-    { x: 700, y: 700, w: 250, angle: -0.2 },
-    { x: 300, y: 900, w: 200, angle: -0.15 },
-    { x: 600, y: 1150, w: 200, angle: 0.15 },
-    { x: 200, y: 1350, w: 220, angle: 0.18 },
-    { x: 700, y: 1550, w: 220, angle: -0.18 },
-    { x: 350, y: 1700, w: 200, angle: -0.12 },
-    { x: 550, y: 1950, w: 200, angle: 0.12 },
-    { x: 200, y: 2150, w: 250, angle: 0.2 },
-    { x: 700, y: 2350, w: 250, angle: -0.2 },
-    { x: 400, y: 2500, w: 200, angle: -0.15 },
-    { x: 500, y: 2750, w: 200, angle: 0.15 },
-    { x: 200, y: 2950, w: 220, angle: 0.18 },
-    { x: 700, y: 3150, w: 220, angle: -0.18 },
-    { x: 350, y: 3350, w: 200, angle: -0.12 },
-    { x: 550, y: 3550, w: 200, angle: 0.12 },
-    { x: 200, y: 3750, w: 250, angle: 0.2 },
-    { x: 700, y: 3950, w: 250, angle: -0.2 },
-    { x: 400, y: 4100, w: 200, angle: -0.15 },
-    { x: 500, y: 4300, w: 200, angle: 0.15 },
+    { x: 200, y: 500, w: 220, angle: 0.35 },
+    { x: 700, y: 700, w: 220, angle: -0.35 },
+    { x: 300, y: 900, w: 180, angle: -0.3 },
+    { x: 600, y: 1150, w: 180, angle: 0.3 },
+    { x: 200, y: 1350, w: 200, angle: 0.38 },
+    { x: 700, y: 1550, w: 200, angle: -0.38 },
+    { x: 350, y: 1700, w: 180, angle: -0.32 },
+    { x: 550, y: 1950, w: 180, angle: 0.32 },
+    { x: 200, y: 2150, w: 220, angle: 0.35 },
+    { x: 700, y: 2350, w: 220, angle: -0.35 },
+    { x: 400, y: 2500, w: 180, angle: -0.3 },
+    { x: 500, y: 2750, w: 180, angle: 0.3 },
+    { x: 200, y: 2950, w: 200, angle: 0.38 },
+    { x: 700, y: 3150, w: 200, angle: -0.38 },
+    { x: 350, y: 3350, w: 180, angle: -0.32 },
+    { x: 550, y: 3550, w: 180, angle: 0.32 },
+    { x: 200, y: 3750, w: 220, angle: 0.35 },
+    { x: 700, y: 3950, w: 220, angle: -0.35 },
+    { x: 400, y: 4100, w: 180, angle: -0.3 },
+    { x: 500, y: 4300, w: 180, angle: 0.3 },
   ];
 
   ramps.forEach(({ x, y, w, angle }) => {
@@ -213,27 +214,25 @@ function createObstacles(world: Matter.World, Composite: typeof Matter.Composite
     Composite.add(world, bumper);
   });
 
-  // Narrow passages / gates
-  for (let i = 0; i < 8; i++) {
-    const y = 650 + i * 550;
-    const gapX = 150 + Math.random() * (WORLD_WIDTH - 300);
-    const gapWidth = 80 + Math.random() * 60;
+  // Angled deflectors (V-shaped, never horizontal)
+  const deflectorPositions = [
+    { x: 300, y: 650, angle: 0.35 }, { x: 600, y: 650, angle: -0.35 },
+    { x: 200, y: 1200, angle: 0.4 }, { x: 700, y: 1200, angle: -0.4 },
+    { x: 350, y: 1750, angle: -0.3 }, { x: 550, y: 1750, angle: 0.3 },
+    { x: 250, y: 2300, angle: 0.35 }, { x: 650, y: 2300, angle: -0.35 },
+    { x: 400, y: 2850, angle: -0.4 }, { x: 500, y: 2850, angle: 0.4 },
+    { x: 200, y: 3400, angle: 0.3 }, { x: 700, y: 3400, angle: -0.3 },
+    { x: 350, y: 3950, angle: -0.35 }, { x: 550, y: 3950, angle: 0.35 },
+    { x: 300, y: 4400, angle: 0.4 }, { x: 600, y: 4400, angle: -0.4 },
+  ];
 
-    if (gapX - 15 > 40) {
-      const leftBlock = Bodies.rectangle((15 + gapX - gapWidth / 2) / 2, y, gapX - gapWidth / 2 - 15, 15, {
-        isStatic: true, restitution: 0.5, label: "gate", render: { fillStyle: "#44aa88" },
-      });
-      Composite.add(world, leftBlock);
-      obstacles.push(leftBlock);
-    }
-    if (gapX + gapWidth / 2 + 15 < WORLD_WIDTH - 15) {
-      const rightBlock = Bodies.rectangle((gapX + gapWidth / 2 + WORLD_WIDTH - 15) / 2, y, WORLD_WIDTH - 15 - gapX - gapWidth / 2, 15, {
-        isStatic: true, restitution: 0.5, label: "gate", render: { fillStyle: "#44aa88" },
-      });
-      Composite.add(world, rightBlock);
-      obstacles.push(rightBlock);
-    }
-  }
+  deflectorPositions.forEach(({ x, y, angle }) => {
+    const deflector = Bodies.rectangle(x, y, 120, 10, {
+      isStatic: true, angle, restitution: 0.6, friction: 0.05, label: "gate", render: { fillStyle: "#44aa88" },
+    });
+    Composite.add(world, deflector);
+    obstacles.push(deflector);
+  });
 
   // Finish line
   const finishLine = Bodies.rectangle(WORLD_WIDTH / 2, FINISH_Y + 40, WORLD_WIDTH - 60, 20, {
@@ -253,7 +252,7 @@ export default function PinballGame() {
   const engineRef = useRef<Matter.Engine | null>(null);
   const ballStatesRef = useRef<BallState[]>([]);
   const [commentary, setCommentary] = useState<CommentaryItem[]>([]);
-  const [rankings, setRankings] = useState<{ name: string; color: string; rank: number }[]>([]);
+  const [rankings, setRankings] = useState<{ name: string; number: number; color: string; rank: number }[]>([]);
   const [gamePhase, setGamePhase] = useState<"ready" | "running" | "finished">("ready");
   const [loser, setLoser] = useState<string | null>(null);
   const [cameraTarget, setCameraTarget] = useState<string>("");
@@ -302,6 +301,7 @@ export default function PinballGame() {
 
     // Create balls
     const balls: BallState[] = PARTICIPANT_NAMES.map((name, i) => {
+      const num = i + 1;
       const x = 100 + (i * (WORLD_WIDTH - 200)) / (PARTICIPANT_NAMES.length - 1) + (Math.random() - 0.5) * 20;
       const body = Bodies.circle(x, 50 + Math.random() * 30, BALL_RADIUS, {
         restitution: 0.6,
@@ -314,6 +314,7 @@ export default function PinballGame() {
       Composite.add(engine.world, body);
       return {
         name,
+        number: num,
         color: BALL_COLORS[i],
         x: body.position.x,
         y: body.position.y,
@@ -380,7 +381,7 @@ export default function PinballGame() {
           finishCountRef.current++;
           ball.rank = finishCountRef.current;
 
-          setRankings((prev) => [...prev, { name: ball.name, color: ball.color, rank: ball.rank! }]);
+          setRankings((prev) => [...prev, { name: ball.name, number: ball.number, color: ball.color, rank: ball.rank! }]);
 
           if (finishCountRef.current < PARTICIPANT_NAMES.length) {
             addCommentary(
@@ -582,20 +583,21 @@ export default function PinballGame() {
         ctx.fill();
         ctx.shadowBlur = 0;
 
-        // Name label
+        // Number label on ball
         ctx.fillStyle = "#fff";
-        ctx.font = "bold 11px Arial";
+        ctx.font = "bold 13px Arial";
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
-        ctx.fillText(ball.name, bx, by);
+        ctx.fillText(String(ball.number), bx, by);
 
-        // Name tag above
+        // Number tag above
         ctx.fillStyle = "rgba(0,0,0,0.7)";
-        const nameWidth = ctx.measureText(ball.name).width + 10;
-        ctx.fillRect(bx - nameWidth / 2, by - BALL_RADIUS - 20, nameWidth, 16);
+        const tagText = `#${ball.number}`;
+        const tagWidth = ctx.measureText(tagText).width + 10;
+        ctx.fillRect(bx - tagWidth / 2, by - BALL_RADIUS - 20, tagWidth, 16);
         ctx.fillStyle = ball.color;
         ctx.font = "bold 10px Arial";
-        ctx.fillText(ball.name, bx, by - BALL_RADIUS - 12);
+        ctx.fillText(tagText, bx, by - BALL_RADIUS - 12);
       }
 
       ctx.restore();
@@ -690,7 +692,7 @@ export default function PinballGame() {
                     className="w-3 h-3 rounded-full inline-block"
                     style={{ backgroundColor: r.color }}
                   />
-                  <span className="text-white">{r.name}</span>
+                  <span className="text-white">#{r.number} {r.name}</span>
                 </div>
               ))}
             </div>
@@ -715,7 +717,7 @@ export default function PinballGame() {
                   className="px-3 py-1.5 rounded-full text-sm font-bold text-white"
                   style={{ backgroundColor: BALL_COLORS[i] + "CC" }}
                 >
-                  {name}
+                  #{i + 1} {name}
                 </span>
               ))}
             </div>
@@ -746,7 +748,7 @@ export default function PinballGame() {
                 boxShadow: `0 0 40px ${BALL_COLORS[PARTICIPANT_NAMES.indexOf(loser)]}66`,
               }}
             >
-              {loser}
+              #{PARTICIPANT_NAMES.indexOf(loser) + 1} {loser}
             </div>
             <p className="text-lg text-yellow-300 mb-8">님이 삽니다! 🎉</p>
 
@@ -766,7 +768,7 @@ export default function PinballGame() {
                     className="w-3 h-3 rounded-full inline-block"
                     style={{ backgroundColor: r.color }}
                   />
-                  <span className={r.name === loser ? "font-bold" : ""}>{r.name}</span>
+                  <span className={r.name === loser ? "font-bold" : ""}>#{r.number} {r.name}</span>
                   {r.name === loser && <span className="ml-auto text-xs">☕ 커피 당첨!</span>}
                 </div>
               ))}
