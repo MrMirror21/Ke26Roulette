@@ -23,31 +23,31 @@ const BALL_COLORS = [
 // Commentary templates
 const COMMENTARY_TEMPLATES = {
   collision: [
-    "💥 {name}의 공이 장애물에 부딪혔습니다!",
-    "🔥 {name}, 강력한 충돌! 방향이 크게 바뀌었습니다!",
-    "⚡ {name}의 공이 튕겨나갑니다!",
-    "🎯 {name}, 장애물에 맞고 새로운 경로로!",
+    "💥 {id}번 공이 장애물에 부딪혔습니다!",
+    "🔥 {id}번, 강력한 충돌! 방향이 크게 바뀌었습니다!",
+    "⚡ {id}번 공이 튕겨나갑니다!",
+    "🎯 {id}번, 장애물에 맞고 새로운 경로로!",
   ],
   leading: [
-    "🏆 현재 {name}이(가) 가장 앞서고 있습니다!",
-    "🚀 {name}, 선두를 달리고 있습니다!",
-    "⭐ {name}이(가) 독주 체제입니다!",
+    "🏆 현재 {id}번이 가장 앞서고 있습니다!",
+    "🚀 {id}번, 선두를 달리고 있습니다!",
+    "⭐ {id}번이 독주 체제입니다!",
   ],
   trailing: [
-    "😰 {name}이(가) 가장 뒤처져 있습니다... 커피 위기!",
-    "☕ {name}, 현재 꼴찌! 커피를 살 위기입니다!",
-    "🐢 {name}, 느릿느릿... 위험합니다!",
+    "😰 {id}번이 가장 뒤처져 있습니다... 커피 위기!",
+    "☕ {id}번, 현재 꼴찌! 커피를 살 위기입니다!",
+    "🐢 {id}번, 느릿느릿... 위험합니다!",
   ],
   overtake: [
-    "🔄 {name}이(가) {other}을(를) 추월했습니다!",
-    "⚡ 역전! {name}이(가) {other} 앞으로!",
+    "🔄 {id}번이 {other}번을 추월했습니다!",
+    "⚡ 역전! {id}번이 {other}번 앞으로!",
   ],
   finish: [
-    "🏁 {name}이(가) 골인했습니다! {rank}등!",
-    "✅ {name}, {rank}등으로 도착!",
+    "🏁 {id}번이 골인했습니다! {rank}등!",
+    "✅ {id}번, {rank}등으로 도착!",
   ],
   lastFinish: [
-    "☕☕☕ {name}이(가) 최종 꼴찌! 오늘 커피는 {name}이(가) 삽니다! ☕☕☕",
+    "☕☕☕ {id}번이 최종 꼴찌! 오늘 커피는 {id}번이 삽니다! ☕☕☕",
   ],
 };
 
@@ -88,26 +88,8 @@ function createObstacles(world: Matter.World, Composite: typeof Matter.Composite
   const funnelRight = Bodies.rectangle(WORLD_WIDTH - 150, 150, 300, 15, { isStatic: true, angle: -Math.PI / 6, restitution: 0.4, label: "obstacle", render: { fillStyle: "#555" } });
   Composite.add(world, [funnelLeft, funnelRight]);
 
-  // Peg rows (classic pinball pegs)
-  for (let row = 0; row < 50; row++) {
-    const y = 350 + row * 90;
-    const cols = row % 2 === 0 ? 8 : 7;
-    const offsetX = row % 2 === 0 ? 60 : 110;
-    for (let col = 0; col < cols; col++) {
-      const x = offsetX + col * 105;
-      if (x > 30 && x < WORLD_WIDTH - 30) {
-        const peg = Bodies.circle(x, y, 10, {
-          isStatic: true,
-          restitution: 0.8,
-          friction: 0.05,
-          label: "peg",
-          render: { fillStyle: "#666" },
-        });
-        obstacles.push(peg);
-        Composite.add(world, peg);
-      }
-    }
-  }
+  // Collect all non-peg obstacle zones to exclude pegs near them
+  const exclusionZones: { x: number; y: number; r: number }[] = [];
 
   // Rotating bars (key feature - obstacles that spin)
   const rotatingBarPositions = [
@@ -129,6 +111,7 @@ function createObstacles(world: Matter.World, Composite: typeof Matter.Composite
   ];
 
   rotatingBarPositions.forEach(({ x, y, w }) => {
+    exclusionZones.push({ x, y, r: w / 2 + 40 });
     const bar = Bodies.rectangle(x, y, w, 12, {
       isStatic: false,
       restitution: 0.9,
@@ -144,7 +127,6 @@ function createObstacles(world: Matter.World, Composite: typeof Matter.Composite
       stiffness: 1,
       length: 0,
     });
-    // Give initial angular velocity
     Body.setAngularVelocity(bar, (Math.random() - 0.5) * 0.08);
     obstacles.push(bar);
     constraints.push(pivot);
@@ -176,11 +158,12 @@ function createObstacles(world: Matter.World, Composite: typeof Matter.Composite
   ];
 
   ramps.forEach(({ x, y, w, angle }) => {
+    exclusionZones.push({ x, y, r: w / 2 + 40 });
     const ramp = Bodies.rectangle(x, y, w, 10, {
       isStatic: true,
       angle,
       restitution: 0.3,
-      friction: 0.1,
+      friction: 0.05,
       label: "ramp",
       render: { fillStyle: "#4a9eff" },
     });
@@ -203,6 +186,7 @@ function createObstacles(world: Matter.World, Composite: typeof Matter.Composite
   ];
 
   bumperPositions.forEach(({ x, y, r }) => {
+    exclusionZones.push({ x, y, r: r + 40 });
     const bumper = Bodies.circle(x, y, r, {
       isStatic: true,
       restitution: 1.2,
@@ -227,12 +211,42 @@ function createObstacles(world: Matter.World, Composite: typeof Matter.Composite
   ];
 
   deflectorPositions.forEach(({ x, y, angle }) => {
+    exclusionZones.push({ x, y, r: 100 });
     const deflector = Bodies.rectangle(x, y, 120, 10, {
       isStatic: true, angle, restitution: 0.6, friction: 0.05, label: "gate", render: { fillStyle: "#44aa88" },
     });
     Composite.add(world, deflector);
     obstacles.push(deflector);
   });
+
+  // Peg rows - placed AFTER other obstacles, excluding zones near them
+  for (let row = 0; row < 50; row++) {
+    const y = 350 + row * 90;
+    const cols = row % 2 === 0 ? 8 : 7;
+    const offsetX = row % 2 === 0 ? 60 : 110;
+    for (let col = 0; col < cols; col++) {
+      const x = offsetX + col * 105;
+      if (x <= 30 || x >= WORLD_WIDTH - 30) continue;
+
+      // Check if this peg is too close to any obstacle
+      const tooClose = exclusionZones.some((zone) => {
+        const dx = x - zone.x;
+        const dy = y - zone.y;
+        return Math.sqrt(dx * dx + dy * dy) < zone.r;
+      });
+      if (tooClose) continue;
+
+      const peg = Bodies.circle(x, y, 10, {
+        isStatic: true,
+        restitution: 0.8,
+        friction: 0.05,
+        label: "peg",
+        render: { fillStyle: "#666" },
+      });
+      obstacles.push(peg);
+      Composite.add(world, peg);
+    }
+  }
 
   // Finish line
   const finishLine = Bodies.rectangle(WORLD_WIDTH / 2, FINISH_Y + 40, WORLD_WIDTH - 60, 20, {
@@ -252,7 +266,7 @@ export default function PinballGame() {
   const engineRef = useRef<Matter.Engine | null>(null);
   const ballStatesRef = useRef<BallState[]>([]);
   const [commentary, setCommentary] = useState<CommentaryItem[]>([]);
-  const [rankings, setRankings] = useState<{ name: string; number: number; color: string; rank: number }[]>([]);
+  const [rankings, setRankings] = useState<{ number: number; color: string; rank: number }[]>([]);
   const [gamePhase, setGamePhase] = useState<"ready" | "running" | "finished">("ready");
   const [loser, setLoser] = useState<string | null>(null);
   const [cameraTarget, setCameraTarget] = useState<string>("");
@@ -299,16 +313,19 @@ export default function PinballGame() {
     // Create obstacles
     createObstacles(engine.world, Composite, Bodies, Body, Constraint);
 
-    // Create balls
+    // Create balls with random starting positions
+    const shuffledStartX = Array.from({ length: PARTICIPANT_NAMES.length }, (_, i) =>
+      50 + Math.random() * (WORLD_WIDTH - 100)
+    );
     const balls: BallState[] = PARTICIPANT_NAMES.map((name, i) => {
       const num = i + 1;
-      const x = 100 + (i * (WORLD_WIDTH - 200)) / (PARTICIPANT_NAMES.length - 1) + (Math.random() - 0.5) * 20;
-      const body = Bodies.circle(x, 50 + Math.random() * 30, BALL_RADIUS, {
+      const x = shuffledStartX[i];
+      const body = Bodies.circle(x, 30 + Math.random() * 50, BALL_RADIUS, {
         restitution: 0.6,
         friction: 0.05,
         density: 0.002,
         frictionAir: 0.001,
-        label: `ball_${name}`,
+        label: `ball_${num}`,
         render: { fillStyle: BALL_COLORS[i] },
       });
       Composite.add(engine.world, body);
@@ -340,10 +357,10 @@ export default function PinballGame() {
         const otherLabel = labels.find((l) => !l.startsWith("ball_"));
 
         if (ballLabel && otherLabel) {
-          const ballName = ballLabel.replace("ball_", "");
+          const ballNum = ballLabel.replace("ball_", "");
           if (otherLabel === "bumper" || otherLabel === "spinner") {
             lastCommentTime = now;
-            addCommentary(pickRandom(COMMENTARY_TEMPLATES.collision).replace("{name}", ballName));
+            addCommentary(pickRandom(COMMENTARY_TEMPLATES.collision).replace("{id}", ballNum));
           }
         }
       }
@@ -381,20 +398,20 @@ export default function PinballGame() {
           finishCountRef.current++;
           ball.rank = finishCountRef.current;
 
-          setRankings((prev) => [...prev, { name: ball.name, number: ball.number, color: ball.color, rank: ball.rank! }]);
+          setRankings((prev) => [...prev, { number: ball.number, color: ball.color, rank: ball.rank! }]);
 
           if (finishCountRef.current < PARTICIPANT_NAMES.length) {
             addCommentary(
               pickRandom(COMMENTARY_TEMPLATES.finish)
-                .replace("{name}", ball.name)
+                .replace("{id}", String(ball.number))
                 .replace("{rank}", String(ball.rank))
             );
           } else {
             // Last one!
             addCommentary(
-              pickRandom(COMMENTARY_TEMPLATES.lastFinish).replace(/\{name\}/g, ball.name)
+              pickRandom(COMMENTARY_TEMPLATES.lastFinish).replace(/\{id\}/g, String(ball.number))
             );
-            setLoser(ball.name);
+            setLoser(String(ball.number));
             setGamePhase("finished");
           }
         }
@@ -407,13 +424,15 @@ export default function PinballGame() {
         const sorted = [...activeBalls].sort((a, b) => b.y - a.y);
         const leader = sorted[0];
         const trailer = sorted[sorted.length - 1];
+        const leaderId = String(leader.number);
+        const trailerId = String(trailer.number);
 
-        if (leader.name !== lastLeaderRef.current && Math.random() < 0.3) {
-          lastLeaderRef.current = leader.name;
-          addCommentary(pickRandom(COMMENTARY_TEMPLATES.leading).replace("{name}", leader.name));
-        } else if (trailer.name !== lastTrailerRef.current && Math.random() < 0.3) {
-          lastTrailerRef.current = trailer.name;
-          addCommentary(pickRandom(COMMENTARY_TEMPLATES.trailing).replace("{name}", trailer.name));
+        if (leaderId !== lastLeaderRef.current && Math.random() < 0.3) {
+          lastLeaderRef.current = leaderId;
+          addCommentary(pickRandom(COMMENTARY_TEMPLATES.leading).replace("{id}", leaderId));
+        } else if (trailerId !== lastTrailerRef.current && Math.random() < 0.3) {
+          lastTrailerRef.current = trailerId;
+          addCommentary(pickRandom(COMMENTARY_TEMPLATES.trailing).replace("{id}", trailerId));
         }
       }
 
@@ -439,7 +458,7 @@ export default function PinballGame() {
             targetX = leader.x;
             targetY = leader.y;
             targetZoom = 0.7;
-            trackingName = leader.name;
+            trackingName = `#${leader.number}`;
             break;
           }
           case 1: { // Trailer (danger zone!)
@@ -447,7 +466,7 @@ export default function PinballGame() {
             targetX = trailer.x;
             targetY = trailer.y;
             targetZoom = 0.7;
-            trackingName = trailer.name;
+            trackingName = `#${trailer.number}`;
             break;
           }
           case 2: { // Pack - follow middle group
@@ -682,7 +701,7 @@ export default function PinballGame() {
             <div className="p-2 max-h-80 overflow-y-auto">
               {rankings.map((r) => (
                 <div
-                  key={r.name}
+                  key={r.number}
                   className="flex items-center gap-2 py-1 text-xs border-b border-white/5 last:border-0"
                 >
                   <span className="w-6 text-center font-bold" style={{ color: r.rank <= 3 ? "#ffd700" : "#888" }}>
@@ -692,7 +711,7 @@ export default function PinballGame() {
                     className="w-3 h-3 rounded-full inline-block"
                     style={{ backgroundColor: r.color }}
                   />
-                  <span className="text-white">#{r.number} {r.name}</span>
+                  <span className="text-white">#{r.number}</span>
                 </div>
               ))}
             </div>
@@ -711,13 +730,13 @@ export default function PinballGame() {
             <p className="text-sm text-white/40 mb-8">15명의 공이 떨어집니다. 꼴찌가 커피를 삽니다!</p>
 
             <div className="flex flex-wrap justify-center gap-2 mb-10 max-w-lg">
-              {PARTICIPANT_NAMES.map((name, i) => (
+              {BALL_COLORS.map((color, i) => (
                 <span
-                  key={name}
-                  className="px-3 py-1.5 rounded-full text-sm font-bold text-white"
-                  style={{ backgroundColor: BALL_COLORS[i] + "CC" }}
+                  key={i}
+                  className="w-10 h-10 rounded-full text-sm font-bold text-white flex items-center justify-center"
+                  style={{ backgroundColor: color + "CC" }}
                 >
-                  #{i + 1} {name}
+                  {i + 1}
                 </span>
               ))}
             </div>
@@ -742,24 +761,24 @@ export default function PinballGame() {
               오늘 커피는...
             </p>
             <div
-              className="inline-block px-8 py-4 rounded-2xl text-3xl font-black text-white mb-6"
+              className="inline-block px-8 py-4 rounded-2xl text-5xl font-black text-white mb-6"
               style={{
-                backgroundColor: BALL_COLORS[PARTICIPANT_NAMES.indexOf(loser)] + "DD",
-                boxShadow: `0 0 40px ${BALL_COLORS[PARTICIPANT_NAMES.indexOf(loser)]}66`,
+                backgroundColor: BALL_COLORS[Number(loser) - 1] + "DD",
+                boxShadow: `0 0 40px ${BALL_COLORS[Number(loser) - 1]}66`,
               }}
             >
-              #{PARTICIPANT_NAMES.indexOf(loser) + 1} {loser}
+              #{loser}
             </div>
-            <p className="text-lg text-yellow-300 mb-8">님이 삽니다! 🎉</p>
+            <p className="text-lg text-yellow-300 mb-8">번이 커피를 삽니다! 🎉</p>
 
             {/* Full ranking */}
             <div className="bg-black/50 rounded-xl p-4 mb-6 max-h-52 overflow-y-auto">
               <p className="text-xs text-white/50 mb-2 font-bold">최종 순위</p>
               {rankings.map((r) => (
                 <div
-                  key={r.name}
+                  key={r.number}
                   className="flex items-center gap-2 py-1 text-sm"
-                  style={{ color: r.name === loser ? "#ff6666" : "#ccc" }}
+                  style={{ color: String(r.number) === loser ? "#ff6666" : "#ccc" }}
                 >
                   <span className="w-8 text-right font-bold">
                     {r.rank === 1 ? "🥇" : r.rank === 2 ? "🥈" : r.rank === 3 ? "🥉" : `${r.rank}등`}
@@ -768,8 +787,8 @@ export default function PinballGame() {
                     className="w-3 h-3 rounded-full inline-block"
                     style={{ backgroundColor: r.color }}
                   />
-                  <span className={r.name === loser ? "font-bold" : ""}>#{r.number} {r.name}</span>
-                  {r.name === loser && <span className="ml-auto text-xs">☕ 커피 당첨!</span>}
+                  <span className={String(r.number) === loser ? "font-bold" : ""}>#{r.number}</span>
+                  {String(r.number) === loser && <span className="ml-auto text-xs">☕ 커피 당첨!</span>}
                 </div>
               ))}
             </div>
